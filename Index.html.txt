@@ -1,0 +1,327 @@
+```html
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estate Stellare 2026 - Villa Filippina</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel per JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .animate-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .bg-space { background-color: #001F3F; }
+        .text-stellar { color: #003B71; }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Recupero configurazione dinamica o fallback
+        const getFirebaseConfig = () => {
+            try {
+                if (window.__firebase_config) return JSON.parse(window.__firebase_config);
+            } catch (e) {}
+            // Inserisci qui i tuoi dati se vuoi usarlo fuori da questo ambiente
+            return {
+                apiKey: "",
+                authDomain: "",
+                projectId: "",
+                storageBucket: "",
+                messagingSenderId: "",
+                appId: ""
+            };
+        };
+
+        const config = getFirebaseConfig();
+        const appId = window.__app_id || 'campus-villa-filippina-2026';
+        const ADMIN_PASS = "campus_filippina_2026";
+
+        // Inizializzazione Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(config);
+        }
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // Icone SVG Inline per massima compatibilità
+        const Icons = {
+            Star: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-star"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+            Phone: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
+            Lock: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+            Check: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+            Trash: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>,
+            Mail: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        };
+
+        function App() {
+            const [view, setView] = useState('home');
+            const [user, setUser] = useState(null);
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [data, setData] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [success, setSuccess] = useState(false);
+
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged(u => {
+                    if (!u) {
+                        auth.signInAnonymously().catch(console.error);
+                    }
+                    setUser(u);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (isAdmin && user) {
+                    const unsubscribe = db.collection('artifacts').doc(appId).collection('registrations')
+                        .onSnapshot(snap => {
+                            setData(snap.docs.map(doc => ({id: doc.id, ...doc.data()})));
+                        });
+                    return () => unsubscribe();
+                }
+            }, [isAdmin, user]);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                const formData = new FormData(e.target);
+                const payload = {
+                    parent: formData.get('parent'),
+                    phone: formData.get('phone'),
+                    email: formData.get('email'),
+                    child: formData.get('child'),
+                    age: formData.get('age'),
+                    status: 'In attesa',
+                    date: new Date().toLocaleString()
+                };
+                try {
+                    await db.collection('artifacts').doc(appId).collection('registrations').add(payload);
+                    setSuccess(true);
+                    setTimeout(() => { setSuccess(false); setView('home'); }, 3000);
+                } catch (err) { alert("Errore connessione database"); }
+                setLoading(false);
+            };
+
+            const Nav = () => (
+                <nav className="bg-[#003B71] text-white p-4 sticky top-0 z-50 flex justify-between items-center shadow-lg px-6">
+                    <div className="flex items-center gap-2 font-black text-lg cursor-pointer" onClick={() => setView('home')}>
+                        <span className="text-yellow-400"><Icons.Star /></span> ESTATE STELLARE
+                    </div>
+                    <div className="flex gap-4 items-center">
+                        <button onClick={() => setView('registration')} className="bg-yellow-400 text-[#003B71] px-4 py-1.5 rounded-full font-black text-sm">ISCRIVITI</button>
+                        <button onClick={() => setView(isAdmin ? 'admin' : 'login')} className="opacity-70 hover:opacity-100">
+                            <Icons.Lock />
+                        </button>
+                    </div>
+                </nav>
+            );
+
+            if (view === 'login') return (
+                <div className="min-h-screen bg-[#F1F5F9]">
+                    <Nav />
+                    <div className="max-w-md mx-auto mt-20 p-8 bg-white rounded-3xl shadow-xl text-center border-t-8 border-[#003B71]">
+                        <h2 className="text-2xl font-black text-[#003B71] mb-6">AREA ADMIN</h2>
+                        <input type="password" id="adminPass" className="w-full p-4 bg-slate-100 rounded-xl mb-4 text-center font-bold outline-none" placeholder="Password" />
+                        <button onClick={() => {
+                            if (document.getElementById('adminPass').value === ADMIN_PASS) { setIsAdmin(true); setView('admin'); }
+                            else alert("Password errata");
+                        }} className="w-full bg-[#003B71] text-white py-4 rounded-xl font-black">ACCEDI</button>
+                    </div>
+                </div>
+            );
+
+            if (view === 'admin') return (
+                <div className="min-h-screen bg-[#F1F5F9]">
+                    <Nav />
+                    <div className="max-w-6xl mx-auto p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-3xl font-black text-[#003B71]">ISCRITTI ({data.length})</h2>
+                            <button onClick={() => setView('home')} className="font-bold text-slate-400">Torna alla Home</button>
+                        </div>
+                        <div className="bg-white rounded-3xl shadow-lg overflow-hidden border border-slate-200">
+                            <table className="w-full text-left">
+                                <thead className="bg-slate-50 border-b border-slate-100">
+                                    <tr className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                                        <th className="p-4">Bambino</th>
+                                        <th className="p-4">Genitore & Email</th>
+                                        <th className="p-4">Stato</th>
+                                        <th className="p-4">Azioni</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {data.map(item => (
+                                        <tr key={item.id} className="text-sm font-bold">
+                                            <td className="p-4 text-[#003B71]">{item.child} <br/><span className="text-[10px] opacity-50 uppercase">{item.age}</span></td>
+                                            <td className="p-4">
+                                                <div className="text-slate-700">{item.parent}</div>
+                                                <div className="text-blue-500 text-xs">{item.phone}</div>
+                                                <div className="text-slate-300 text-[10px] font-normal italic">{item.email}</div>
+                                            </td>
+                                            <td className="p-4">
+                                                <span className={`px-3 py-1 rounded-full text-[9px] uppercase ${item.status === 'Confermata' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                    {item.status}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 flex gap-2">
+                                                <button onClick={() => db.collection('artifacts').doc(appId).collection('registrations').doc(item.id).update({status: 'Confermata'})} className="p-2 bg-green-50 text-green-600 rounded-lg"><Icons.Check/></button>
+                                                <button onClick={() => { if(confirm("Eliminare?")) db.collection('artifacts').doc(appId).collection('registrations').doc(item.id).delete(); }} className="p-2 bg-red-50 text-red-400 rounded-lg"><Icons.Trash/></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            if (view === 'registration') return (
+                <div className="min-h-screen bg-slate-50 pb-10">
+                    <Nav />
+                    <div className="max-w-3xl mx-auto mt-10 p-4">
+                        <div className="bg-white rounded-[2.5rem] shadow-2xl border-8 border-[#81D4FA] overflow-hidden">
+                            <div className="bg-[#81D4FA] p-8 text-center">
+                                <h2 className="text-3xl font-black text-[#003B71] uppercase leading-tight">Modulo Iscrizione</h2>
+                            </div>
+                            {success ? (
+                                <div className="p-20 text-center space-y-4">
+                                    <div className="text-green-500 flex justify-center"><Icons.Check size={64}/></div>
+                                    <h3 className="text-3xl font-black text-[#003B71]">PRENOTATO!</h3>
+                                    <p className="font-bold text-slate-400">Ti ricontatteremo a breve.</p>
+                                </div>
+                            ) : (
+                                <form onSubmit={handleSubmit} className="p-8 md:p-12 space-y-6">
+                                    <div className="grid md:grid-cols-2 gap-6">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nome Genitore</label>
+                                            <input required name="parent" className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-blue-400 font-bold" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Telefono</label>
+                                            <input required name="phone" className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-blue-400 font-bold" />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email</label>
+                                        <input required name="email" type="email" className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-blue-400 font-bold" />
+                                    </div>
+                                    <div className="grid md:grid-cols-2 gap-6">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nome Bambino/a</label>
+                                            <input required name="child" className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-blue-400 font-bold" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Età</label>
+                                            <select name="age" className="w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-2xl outline-none font-bold">
+                                                <option>4-5 Anni</option><option>6-8 Anni</option><option>9-11 Anni</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button disabled={loading} className="w-full bg-[#003B71] text-white py-6 rounded-3xl font-black text-xl shadow-xl">
+                                        {loading ? "INVIO IN CORSO..." : "INVIA RICHIESTA"}
+                                    </button>
+                                </form>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="animate-in">
+                    <Nav />
+                    {/* Hero */}
+                    <header className="bg-[#FFEB3B] py-20 px-4 text-center">
+                        <h1 className="text-5xl md:text-8xl font-black text-[#003B71] tracking-tighter mb-4 uppercase leading-none">ESTATE STELLARE</h1>
+                        <h2 className="text-xl md:text-3xl font-black text-[#003B71] bg-white/40 px-6 py-2 rounded-2xl inline-block mb-8 tracking-tight italic">“R-ESTATE a VILLA FILIPPINA”</h2>
+                        <div className="flex justify-center gap-2 mb-10">
+                            {[1,2,3,4,5].map(i => <div key={i} className="text-yellow-500 fill-yellow-500"><Icons.Star/></div>)}
+                        </div>
+                        <button onClick={() => setView('registration')} className="bg-[#003B71] text-white px-12 py-5 rounded-full font-black text-xl shadow-2xl hover:scale-105 transition">PRENOTA ORA</button>
+                    </header>
+
+                    {/* Programma */}
+                    <section className="bg-[#81D4FA] py-16 px-6">
+                        <div className="max-w-6xl mx-auto">
+                            <h3 className="text-4xl font-black text-[#003B71] text-center mb-12 uppercase">ATTIVITÀ SETTIMANALI</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                {[
+                                    {d: 'LUNEDÌ', t: 'Sport & Lab', c: 'Calcio, Basket e Lab Maschere.'},
+                                    {d: 'MARTEDÌ', t: 'Olimpiadi', c: 'Staffette, Vortex e Planetario.'},
+                                    {d: 'MERCOLEDÌ', t: 'Acqua', c: 'Gavettoni e Caccia al Tesoro.'},
+                                    {d: 'GIOVEDÌ', t: 'Spettacolo', c: 'Bolle Giganti e Teatrino.'},
+                                    {d: 'VENERDÌ', t: 'Show Finale', c: 'Premiazioni e Show dei ragazzi.'},
+                                ].map((day, i) => (
+                                    <div key={i} className="bg-white/60 p-6 rounded-[2rem] border-2 border-white shadow-sm hover:translate-y-[-4px] transition">
+                                        <div className="text-[#003B71] font-black text-xl mb-1">{day.d}</div>
+                                        <div className="text-[10px] font-black uppercase text-blue-600 mb-3 opacity-60 tracking-wider">{day.t}</div>
+                                        <p className="text-sm font-bold text-[#003B71] opacity-80 leading-tight">{day.c}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Info */}
+                    <section className="bg-space py-20 px-6 text-white text-center">
+                        <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-10 items-center">
+                            <div className="text-left space-y-6">
+                                <h4 className="text-3xl font-black uppercase tracking-tighter">Iscrizioni Whatsapp</h4>
+                                <div className="space-y-4">
+                                    <a href="tel:3891335731" className="bg-white/10 p-6 rounded-3xl flex items-center gap-4 hover:bg-white/20 transition group">
+                                        <div className="bg-green-500 p-3 rounded-full"><Icons.Phone/></div>
+                                        <div>
+                                            <div className="text-xs opacity-50 uppercase font-black">Numero 1</div>
+                                            <div className="text-2xl font-black">389 1335731</div>
+                                        </div>
+                                    </a>
+                                    <a href="tel:3420116832" className="bg-white/10 p-6 rounded-3xl flex items-center gap-4 hover:bg-white/20 transition group">
+                                        <div className="bg-green-500 p-3 rounded-full"><Icons.Phone/></div>
+                                        <div>
+                                            <div className="text-xs opacity-50 uppercase font-black">Numero 2</div>
+                                            <div className="text-2xl font-black">342 0116832</div>
+                                        </div>
+                                    </a>
+                                </div>
+                            </div>
+                            <div className="bg-white/5 p-10 rounded-[3rem] border border-white/10 space-y-4 text-left">
+                                <h5 className="font-black uppercase text-yellow-400">Info Rapide</h5>
+                                <div className="space-y-2 font-bold text-sm">
+                                    <div className="flex justify-between border-b border-white/5 pb-2"><span>Orario</span><span>08:00 - 13:00</span></div>
+                                    <div className="flex justify-between border-b border-white/5 pb-2"><span>Età</span><span>4-11 Anni</span></div>
+                                    <div className="flex justify-between"><span>Sede</span><span>Villa Filippina</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <footer className="bg-slate-50 py-10 text-center opacity-30 text-[10px] font-black uppercase tracking-[0.3em]">
+                        Urania Management &bull; 2026 &bull; Palermo
+                    </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
+```
